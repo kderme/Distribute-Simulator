@@ -6,12 +6,13 @@ import Control.Monad.State
 import VProcess
 
 simulator :: (Show st, Show msg) =>
-             (msg -> VP st IO msg ()) -> VP st IO msg (ProcessId,msg) -> VP st IO msg ()
-simulator agentFun scheduler = forever $ do
+             VP st IO msg (ProcessId,msg) -> VP st IO msg ()
+simulator scheduler = forever $ do
   (pid,msg) <- scheduler
-  modify (\ (GlobalState a _ c d e) -> GlobalState a pid c d e)
-  agentFun msg
-  modify (\ (GlobalState a _ c d e) -> GlobalState a 0 c d e) -- GlobalState states 0 nextId sent received
+  modify (\ (GlobalState a b _ c d e) -> GlobalState a b pid c d e)
+  fun <- myFunction
+  fun msg
+  modify (\ (GlobalState a b _ c d e) -> GlobalState a b 0 c d e) -- GlobalState states 0 nextId sent received
   return ()
 
 runSimulation :: (Show st, Show msg) =>

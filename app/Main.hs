@@ -1,23 +1,28 @@
 module Main where
 
+import System.Environment
 import VProcess
 import Simulator
 import Schedulers.Interactive
 import Control.Monad.State
 import System.Random
+import qualified Examples.Counter as C (run)
 
 main :: IO ()
-main = do
-  let sim = simulator (fun 4) interactive --interactive
+main = C.run
+
+run :: IO ()
+run = do
+  let sim = simulator interactive --interactive
   finalState <- runSimulation sim (master 2)
   return ()
 
 -- | Master is not a real VProcess. He is responsible for spawning all VProcesses.
 master :: Int -> VP MyState IO MyMessage ()
 master n = do
-  a <- spawn initAgent1
-  b <- spawn initAgent1
-  ls <- replicateM n $ spawn initAgent2
+  _ <- spawn initAgent1 (fun 4)
+  _ <- spawn initAgent1 (fun 4)
+  replicateM_ n $ spawn initAgent2 (fun 4)
   send 2 "Hello"
   return ()
 
