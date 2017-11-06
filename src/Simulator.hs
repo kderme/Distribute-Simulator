@@ -1,22 +1,27 @@
-{-# LANGUAGE RecordWildCards #-}
-
 module Simulator where
 
 import Control.Monad.State
 import VProcess
 
 simulator :: (Show st, Show msg) =>
-             VP st IO msg (ProcessId,msg) -> VP st IO msg ()
-simulator scheduler = forever $ do
-  (pid,msg) <- scheduler
-  modify (\ (GlobalState a b _ c d e) -> GlobalState a b pid c d e)
-  fun <- myFunction
-  fun msg
-  modify (\ (GlobalState a b _ c d e) -> GlobalState a b 0 c d e) -- GlobalState states 0 nextId sent received
-  return ()
+             VP st msg mem (Maybe (ProcessId,msg)) -> VP st msg mem ()
+simulator scheduler = go
+  where
+    go = do
+      mdel <- scheduler
+      case mdel of
+        (Just (pid,msg1)) -> do
+          modify (\ (Configuration a b _ c d e f) -> Configuration a b pid c d e f)
+          fun <- myFunction
+          fun msg1
+          modify (\ (Configuration a b _ c d e f) -> Configuration a b 0 c d e f)
+          go
+        Nothing -> return ()
 
-runSimulation :: (Show st, Show msg) =>
-             VP st IO msg () -> VP st IO msg () -> IO (GlobalState st msg)
+-- | This turns a VProcess to an IO. master will be replaced by spawn master,
+-- when bugs are fixed, so that the first VProcess is not a special kind of VProcess.
+runSimulation :: (Show st, Show msg, Stateable mem) =>
+             VP st msg mem () -> VP st msg mem () -> IO (Configuration st msg mem)
 runSimulation sim master = do
   let st = do
               master

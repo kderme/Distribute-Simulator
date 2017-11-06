@@ -12,19 +12,30 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     VProcess, Simulator, Schedulers.Interactive, Examples.Counter
-  build-depends:       base >= 4.7 && < 5, mtl, containers, binary
+  exposed-modules:     VProcess
+                     , Simulator
+                     , Schedulers.Interactive
+                     , Schedulers.FifoScheduler
+                     , Examples.Counter
+                     , Examples.SayHi
+  build-depends:       base >= 4.7 && < 5, mtl, containers, binary, random
   ghc-options:         -Wall
   default-language:    Haskell2010
 
-executable simulator-exe
-  hs-source-dirs:      app
+executable counter-simulation
+  hs-source-dirs:      app/examples/counter/
   main-is:             Main.hs
   ghc-options:         -Wall
   build-depends:       base
                      , distributed-simulator
-                     , mtl
-                     , random
+  default-language:    Haskell2010
+
+executable sayhi-simulation
+  hs-source-dirs:      app/examples/sayhi/
+  main-is:             Main.hs
+  ghc-options:         -Wall
+  build-depends:       base
+                     , distributed-simulator
   default-language:    Haskell2010
 
 test-suite simulator-test

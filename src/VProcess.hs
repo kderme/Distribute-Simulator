@@ -10,30 +10,30 @@ import Data.Maybe
 someFunc :: IO ()
 someFunc = putStrLn "someFunc"
 
-type VProcess a m b = StateT a m b
-
 type ProcessId = Int
 
 data (Show msg, Read msg, Eq msg) => Message msg = Message {
-    from :: ProcessId
-  , to   :: ProcessId
-  , msg  :: msg
+    mfrom :: ProcessId
+  , mto   :: ProcessId
+  , mmsg  :: msg
 } deriving (Show, Eq)
 
 -- | Class of types that act as states an so they have an initial default state.
 class Stateable st where
   initState :: st
 
-data (Show st, Show msg) => GlobalState st msg = GlobalState {
+data (Show st, Show msg) => Configuration st msg mem = Configuration {
     states    :: M.Map ProcessId st
-  , functions :: M.Map ProcessId (msg -> VP st IO msg ())
+  , functions :: M.Map ProcessId (msg -> VP st msg mem ())
   , runningId :: ProcessId
   , nextId    :: ProcessId
   , sent      :: [Message msg]
   , received  :: [Message msg]
+  , simMem    :: mem
   }
 
-data (Show st, Show msg) => GlobalState' st msg = GlobalState' {
+-- | This is a subset of Configuration. Quick and dirty way to instantiate Show.
+data (Show st, Show msg) => Configuration' st msg = Configuration' {
     states'    :: M.Map ProcessId st
   , runningId' :: ProcessId
   , nextId'    :: ProcessId
@@ -41,24 +41,26 @@ data (Show st, Show msg) => GlobalState' st msg = GlobalState' {
   , received'  :: [Message msg]
   } deriving (Show)
 
-instance (Show st, Show msg, Read msg, Eq msg) => Show (GlobalState st msg) where
-  show GlobalState{..} = show $ GlobalState' states runningId nextId sent received
+instance (Show st, Show msg, Read msg, Eq msg) => Show (Configuration st msg mem) where
+  show Configuration{..} = show $ Configuration' states runningId nextId sent received
 
-type VP st m msg v = VProcess (GlobalState st msg) m v
+type VPT st msg mem m v = StateT (Configuration st msg mem) m v
 
-instance (Show st, Show msg) => Stateable (GlobalState st msg) where
-  initState = GlobalState M.empty M.empty 0 1 [] []
+type VP st msg mem v = StateT (Configuration st msg mem) IO v
+
+instance (Show st, Show msg, Stateable mem) => Stateable (Configuration st msg mem) where
+  initState = Configuration M.empty M.empty 0 1 [] [] initState
 
 getSelfPid :: (Monad m, Show st, Show msg) =>
-              VProcess (GlobalState st msg) m ProcessId
+              VPT st msg mem m ProcessId
 getSelfPid = do
-  GlobalState{..} <- get
+  Configuration{..} <- get
   return runningId
 
 say :: (Eq msg, Show msg, Read msg, Show st) =>
-       String -> VProcess (GlobalState st msg) IO ()
+       String -> VP st msg mem ()
 say str = do
-  GlobalState{..} <- get
+  Configuration{..} <- get
   liftIO $ do
     putStr $ "Process " ++ show runningId ++ ": "
     putStrLn str
@@ -66,58 +68,59 @@ say str = do
 -- | Monad d is a dummy Monad, as we only need the Monadic powers of the State.
 -- We don`t need IO or anything else here.
 send :: (Eq msg, Show msg, Read msg, Show st, Monad m) =>
-        ProcessId -> msg -> VProcess (GlobalState st msg) m ()
+        ProcessId -> msg -> VPT st msg mem m ()
 send pidTo msg = do
-  GlobalState{..} <- get
+  Configuration{..} <- get
   let mess = Message runningId pidTo msg
-  put $ GlobalState states functions runningId nextId (mess : sent) received
+  put $ Configuration states functions runningId nextId (mess : sent) received simMem
   return ()
 
+-- | Spawns a new VProcess.
 spawn :: (Monad m, Show st, Show msg) =>
-         VProcess (GlobalState st msg) m st ->
-         (msg -> VProcess (GlobalState st msg) IO ()) ->
-         VProcess (GlobalState st msg) m ProcessId
+         VPT st msg mem m st ->
+         (msg -> VP st msg mem ()) ->
+         VPT st msg mem m ProcessId
 spawn initiateState fun = do
-  GlobalState{..} <- get
-  modify $ \ (GlobalState a b _ _ c d) -> GlobalState a b nextId (nextId + 1) c d
+  Configuration{..} <- get
+  modify $ \ (Configuration a b _ _ c d e) -> Configuration a b nextId (nextId + 1) c d e
   st <- initiateState
   let newStates = M.insert nextId st states
   let newFunctions = M.insert nextId fun functions
-  modify $ \ (GlobalState _ _ _ _ c d) -> GlobalState newStates newFunctions runningId (nextId + 1) c d
+  modify $ \ (Configuration _ _ _ _ c d e) -> Configuration newStates newFunctions runningId (nextId + 1) c d e
   return nextId
 
 -- | A VProcess can call this function to terminate.
-terminate :: (Monad m,Show st, Show msg) => VProcess (GlobalState st msg) m ()
+terminate :: (Monad m,Show st, Show msg) => VPT st msg mem m ()
 terminate = do
-  GlobalState{..} <- get
+  Configuration{..} <- get
   let newStates = M.delete runningId states
-  put $ GlobalState newStates functions runningId (nextId + 1) sent received
+  put $ Configuration newStates functions runningId (nextId + 1) sent received simMem
 
 -- | A VProcess can call this function to take its state.
-myState :: (Monad m,Show st, Show msg) => VProcess (GlobalState st msg) m st
+myState :: (Monad m,Show st, Show msg) => VPT st msg mem m st
 myState = do
-  GlobalState{..} <- get
+  Configuration{..} <- get
   return $ fromJust $ M.lookup runningId states
 
 -- | The simulator can call this function to take the function of the VProcess
 -- that is about to run.
 myFunction :: (Monad m,Show st, Show msg) =>
-              VProcess (GlobalState st msg) m (msg -> VP st IO msg ())
+              VPT st msg mem m (msg -> VP st msg mem ())
 myFunction = do
-  GlobalState{..} <- get
+  Configuration{..} <- get
   return $ fromJust $ M.lookup runningId functions
 
 -- | A VProcess can call this function to change its state.
-insertState :: (Monad m,Show st, Show msg) => st -> VProcess (GlobalState st msg) m ()
+insertState :: (Monad m,Show st, Show msg) => st -> VPT st msg mem m ()
 insertState st = do
-  GlobalState{..} <- get
+  Configuration{..} <- get
   let newStates = M.insert runningId st states
-  put $ GlobalState newStates functions runningId nextId sent received
+  put $ Configuration newStates functions runningId nextId sent received simMem
 
 -- | A VProcess can call this function to transform its state.
-applyS :: (Monad m,Show st, Show msg) => (st -> st) -> VProcess (GlobalState st msg) m st
+applyS :: (Monad m,Show st, Show msg) => (st -> st) -> VPT st msg mem m st
 applyS transf = do
-  GlobalState{..} <- get
+  Configuration{..} <- get
   st <- myState
   let newMyState = transf st
   insertState newMyState
