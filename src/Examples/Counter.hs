@@ -5,7 +5,7 @@ module Examples.Counter where
 import           System.Environment
 import           VProcess
 import           Simulator
-import           Schedulers.FifoScheduler
+import           Schedulers.Interactive
 import           Control.Monad.State
 import           Data.Binary
 import           GHC.Generics

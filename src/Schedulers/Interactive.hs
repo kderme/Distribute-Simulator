@@ -40,5 +40,5 @@ delete k ls = do
 
 nth :: Int -> [a] -> Maybe a
 nth _ []       = Nothing
-nth 1 (x : _)  = Just x
+nth 0 (x : _)  = Just x
 nth n (_ : xs) = nth (n - 1) xs
