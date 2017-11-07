@@ -125,3 +125,10 @@ applyS transf = do
   let newMyState = transf st
   insertState newMyState
   return newMyState
+
+expect :: (Show st, Show msg) =>
+          (msg -> VP st msg mem ()) -> VP st msg mem ()
+expect fun = do
+  Configuration{..} <- get
+  let newFunctions = M.insert runningId fun functions
+  put $ Configuration states newFunctions runningId nextId sent received simMem

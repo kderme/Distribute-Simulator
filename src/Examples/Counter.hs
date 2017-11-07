@@ -4,19 +4,33 @@ module Examples.Counter where
 
 import           System.Environment
 import           VProcess
-import           Simulator
-import           Schedulers.Interactive
+-- import           Simulator
+import           TreeSimulator
+--import           Schedulers.Interactive
 import           Control.Monad.State
 import           Data.Binary
 import           GHC.Generics
 import           Data.Typeable
+import Data.Tree as T
 
 run :: IO ()
 run = do
   [n,m] <- getArgs
+  let sim = simulator treeScheduler
+  finalState <- runSimulation sim (spawner (read n) (read m))
+  checkingTree finalState
+
+  return ()
+{-}
+run1 :: IO ()
+run1 = do
+  [n,m] <- getArgs
   let sim = simulator scedule
   finalState <- runSimulation sim (spawner (read n) (read m))
   return ()
+-}
+instance Stateable () where
+  initState = ()
 
 type VProcess v = VP MyState MyMessage () v
 
@@ -74,7 +88,8 @@ counterInit = do
   return $ Counter 0
 
 counter :: MyMessage -> VProcess ()
-counter (Inc pid) = do
+counter msg@(Inc pid) = do
+  say $ "Got " ++ show msg
   Counter newState <- applyS addOne
   send pid $ Report newState
 
